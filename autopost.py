@@ -21,7 +21,9 @@ import requests
 ROOT = pathlib.Path(__file__).resolve().parent
 QUEUE = ROOT / "queue"
 LOG = ROOT / "published.json"
-API = "https://graph.instagram.com/" + os.environ.get("IG_API_VERSION", "v25.0")
+VER = os.environ.get("IG_API_VERSION", "v25.0")
+HOSTS = {"instagram": f"https://graph.instagram.com/{VER}", "facebook": f"https://graph.facebook.com/{VER}"}
+_host = {"name": None}
 IMG_EXT = (".jpg", ".jpeg")
 MAX_SLIDES = 10          # API carousel limit
 CAPTION_MAX = 2200
@@ -34,14 +36,37 @@ def die(msg):
 
 
 def token():
-    t = os.environ.get("IG_ACCESS_TOKEN", "").strip()
+    t = os.environ.get("IG_ACCESS_TOKEN", "").strip().strip('"').strip("'")
+    if t.lower().startswith("bearer "):
+        t = t[7:].strip()
     if not t:
         die("IG_ACCESS_TOKEN is not set")
     return t
 
 
+def host():
+    """Instagram-Login tokens use graph.instagram.com, Facebook-Login / Unified-login
+    tokens use graph.facebook.com. Pick by token shape, confirm with a probe."""
+    if _host["name"]:
+        return _host["name"]
+    forced = os.environ.get("IG_HOST", "").strip().lower()
+    if forced in HOSTS:
+        _host["name"] = forced
+        return forced
+    order = ["facebook", "instagram"] if token().startswith("EAA") else ["instagram", "facebook"]
+    errors = []
+    for name in order:
+        r = requests.get(f"{HOSTS[name]}/me", params={"fields": "id", "access_token": token()}, timeout=60)
+        if r.status_code < 400:
+            _host["name"] = name
+            print(f"token works with graph.{name}.com", file=sys.stderr)
+            return name
+        errors.append(f"{name}: {r.text[:200]}")
+    die("token rejected by both Instagram and Facebook APIs -> " + " | ".join(errors))
+
+
 def call(method, path, **params):
-    url = path if path.startswith("http") else f"{API}/{path.lstrip('/')}"
+    url = path if path.startswith("http") else f"{HOSTS[host()]}/{path.lstrip('/')}"
     params["access_token"] = token()
     r = requests.request(method, url, params=params if method == "GET" else None,
                          data=params if method != "GET" else None, timeout=60)
@@ -144,7 +169,10 @@ def cmd_check():
 
 
 def cmd_whoami():
-    me = call("GET", "me", fields="user_id,username,account_type,media_count")
+    if host() == "instagram":
+        me = call("GET", "me", fields="user_id,username,account_type,media_count")
+    else:
+        me = call("GET", ig_id(), fields="username,media_count")
     print(json.dumps(me, indent=2))
     lim = call("GET", f"{ig_id()}/content_publishing_limit", fields="quota_usage,config")
     print("publishing limit:", json.dumps(lim.get("data", lim)))
@@ -154,6 +182,8 @@ def ig_id():
     env = os.environ.get("IG_USER_ID", "").strip()
     if env:
         return env
+    if host() == "facebook":
+        die("IG_USER_ID is required with a Facebook-style token")
     return call("GET", "me", fields="user_id")["user_id"]
 
 
@@ -228,6 +258,19 @@ def cmd_publish(dry_run=False):
 
 
 def cmd_refresh():
+    if host() == "facebook":
+        app_id, secret = os.environ.get("FB_APP_ID", ""), os.environ.get("FB_APP_SECRET", "")
+        if not (app_id and secret):
+            print("Facebook-style token: add FB_APP_ID + FB_APP_SECRET secrets to auto-refresh it", file=sys.stderr)
+            sys.exit(3)
+        r = requests.get(f"{HOSTS['facebook']}/oauth/access_token", timeout=60, params={
+            "grant_type": "fb_exchange_token", "client_id": app_id, "client_secret": secret, "fb_exchange_token": token()})
+        body = r.json()
+        if "access_token" not in body:
+            die(f"refresh failed: {json.dumps(body)[:400]}")
+        print("refreshed Facebook-style token", file=sys.stderr)
+        print(body["access_token"])
+        return
     r = requests.get("https://graph.instagram.com/refresh_access_token",
                      params={"grant_type": "ig_refresh_token", "access_token": token()}, timeout=60)
     body = r.json()
