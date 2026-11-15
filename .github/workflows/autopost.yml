@@ -2,7 +2,7 @@ name: Autopost to Instagram
 
 on:
   schedule:
-    - cron: "*/30 * * * *"        # checks the queue every 30 minutes (UTC)
+    - cron: "*/30 * * * *"        # checks the queue every 30 minutes (UTC); posts go out within ~30 min of publish_at
   workflow_dispatch:
     inputs:
       dry_run:
