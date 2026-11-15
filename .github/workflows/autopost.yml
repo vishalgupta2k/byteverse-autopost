@@ -1,0 +1,57 @@
+name: Autopost to Instagram
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"        # checks the queue every 30 minutes (UTC)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (show what would be posted, post nothing)"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ["queue/**"]
+
+concurrency:
+  group: autopost                  # never two publishes at once
+  cancel-in-progress: false
+
+permissions:
+  contents: write                  # to commit published.json
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      - name: Validate queue
+        run: python autopost.py check
+
+      - name: Publish due posts
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            python autopost.py publish --dry-run
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            python autopost.py publish --dry-run   # a push only validates; the schedule posts
+          else
+            python autopost.py publish
+          fi
+
+      - name: Save publish log
+        run: |
+          if [ -n "$(git status --porcelain published.json)" ]; then
+            git config user.name "byteverse-autopost"
+            git config user.email "actions@users.noreply.github.com"
+            git add published.json
+            git commit -m "Log published post"
+            git push
+          fi

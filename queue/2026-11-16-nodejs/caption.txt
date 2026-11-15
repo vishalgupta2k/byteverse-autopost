@@ -1,0 +1,25 @@
+Node.js Interview Notes — 10 slides, backend ready 🟩⚙️
+
+Preparing for backend or full-stack interviews? Save this — event loop, streams, Express, scaling & security explained in 10 slides.
+
+📌 Inside:
+1️⃣ What Node.js really is (V8 + libuv)
+2️⃣ Architecture & the thread pool
+3️⃣ Event loop phases + an output-order puzzle
+4️⃣ CommonJS vs ESM + package.json
+5️⃣ Callbacks → Promises → async/await
+6️⃣ Streams & backpressure
+7️⃣ Express middleware & error handling
+8️⃣ cluster vs worker_threads + scaling
+9️⃣ Security, JWT & production practices
+🔟 12 rapid-fire interview questions
+
+💡 Is Node.js really single-threaded? Swipe to slide 2 👉
+
+💾 SAVE for revision
+📤 SHARE with a backend buddy
+💬 Comment "NODE" for the next part of the Backend Series
+
+Follow @byteverse.daily for daily coding & interview content 🚀
+
+#nodejs #backenddeveloper #javascript #expressjs #codinginterview
