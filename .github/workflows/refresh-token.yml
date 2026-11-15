@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "17 3 1,15 * *"        # 1st and 15th of every month (token lasts 60 days)
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/refresh-token.yml"]   # test refresh when this file changes
 
 jobs:
   refresh:
