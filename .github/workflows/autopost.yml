@@ -39,6 +39,7 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            if [ -n "$IG_ACCESS_TOKEN" ]; then python autopost.py whoami; else echo "IG_ACCESS_TOKEN secret not set yet"; fi
             python autopost.py publish --dry-run
           elif [ "${{ github.event_name }}" = "push" ]; then
             python autopost.py publish --dry-run   # a push only validates; the schedule posts
