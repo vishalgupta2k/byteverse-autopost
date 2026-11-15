@@ -37,10 +37,13 @@ jobs:
         env:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID || '17841450608939000' }}
+          PUBLISH_NOW: ${{ contains(github.event.head_commit.message, '[publish]') }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
             if [ -n "$IG_ACCESS_TOKEN" ]; then python autopost.py whoami; else echo "IG_ACCESS_TOKEN secret not set yet"; fi
             python autopost.py publish --dry-run
+          elif [ "${{ github.event_name }}" = "push" ] && [ "$PUBLISH_NOW" = "true" ]; then
+            python autopost.py publish             # commit message had [publish]: post what's due now
           elif [ "${{ github.event_name }}" = "push" ]; then
             if [ -n "$IG_ACCESS_TOKEN" ]; then python autopost.py whoami; fi
             python autopost.py publish --dry-run   # a push only validates; the schedule posts

@@ -41,6 +41,7 @@ python autopost.py check
 git add queue && git commit -m "Queue SQL notes" && git push
 ```
 
+To post something that is already due right away, push a commit whose message contains `[publish]`.
 To cancel a post, delete its folder before its time. To change the time, edit `post.json`.
 
 ## Notes
