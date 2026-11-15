@@ -11,7 +11,7 @@ on:
         default: true
   push:
     branches: [main]
-    paths: ["queue/**"]
+    paths: ["queue/**", ".github/workflows/autopost.yml"]
 
 concurrency:
   group: autopost                  # never two publishes at once
@@ -42,6 +42,7 @@ jobs:
             if [ -n "$IG_ACCESS_TOKEN" ]; then python autopost.py whoami; else echo "IG_ACCESS_TOKEN secret not set yet"; fi
             python autopost.py publish --dry-run
           elif [ "${{ github.event_name }}" = "push" ]; then
+            if [ -n "$IG_ACCESS_TOKEN" ]; then python autopost.py whoami; fi
             python autopost.py publish --dry-run   # a push only validates; the schedule posts
           else
             python autopost.py publish
