@@ -1,0 +1,25 @@
+React Interview Notes — 10 pages, hooks to React 19 ⚛️📒
+
+Preparing for frontend or full-stack interviews? Save this — the React concepts interviewers ask the most, plus the tricky questions that trip up even experienced devs.
+
+📌 Inside:
+1️⃣ Virtual DOM, JSX, props vs state
+2️⃣ Re-renders, keys & reconciliation
+3️⃣ useState & useEffect deep dive
+4️⃣ useMemo, useCallback, useReducer + custom hooks
+5️⃣ Context vs Redux vs Zustand vs React Query
+6️⃣ Performance optimization checklist
+7️⃣ Forms, events & lifecycle → hooks
+8️⃣ SSR vs CSR vs SSG + React 19 features
+9️⃣ 8 tricky React questions 🤯
+🔟 Rapid-fire Q&A + machine-coding tasks
+
+💡 setCount(count + 1) three times = … 1, not 3. Find out why on page 9 👉
+
+💾 SAVE for revision
+📤 SHARE with a friend preparing for frontend interviews
+💬 Comment "REACT" for a list of machine-coding questions
+
+Follow @byteverse.daily for daily coding & interview content 🚀
+
+#reactjs #frontenddeveloper #javascript #webdevelopment #codinginterview
