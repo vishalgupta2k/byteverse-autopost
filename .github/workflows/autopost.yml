@@ -23,6 +23,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 40              # Reels can take ~15 min to process
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

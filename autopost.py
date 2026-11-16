@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""ByteVerse Daily autopost: publish queued Instagram carousels via the
-Instagram API with Instagram Login (graph.instagram.com). No Facebook Page needed.
+"""ByteVerse Daily autopost: publish queued Instagram carousels and Reels via the
+official Instagram API. No Facebook Page needed.
 
 Commands
-  prepare <slides_dir> <caption.txt> <publish_at> <slug>   add a post to queue/ (PNG -> JPEG)
+  prepare <slides_dir> <caption.txt> <publish_at> <slug>   add a carousel to queue/ (PNG -> JPEG)
+  prepare-video <video> <caption.txt> <publish_at> <slug> [cover.png]
+                                                           add a Reel to queue/ (re-encodes to 1080x1920 H.264/AAC)
   check                                                    validate every queued post
   whoami                                                   show the account the token belongs to
   publish [--dry-run]                                      publish every post whose time has come
@@ -28,6 +30,8 @@ IMG_EXT = (".jpg", ".jpeg")
 MAX_SLIDES = 10          # API carousel limit
 CAPTION_MAX = 2200
 HASHTAG_MAX = 5
+VIDEO_MAX_MB = 95        # GitHub rejects files over 100 MB
+REEL_MIN_S, REEL_MAX_S = 3, 900
 
 
 def die(msg):
@@ -105,15 +109,61 @@ def posts():
         if not meta_f.exists():
             continue
         meta = json.loads(meta_f.read_text())
-        slides = sorted(f for f in d.iterdir() if f.suffix.lower() in IMG_EXT)
+        slides = sorted(f for f in d.iterdir() if f.suffix.lower() in IMG_EXT and f.stem != "cover")
         caption = (d / "caption.txt").read_text().strip() if (d / "caption.txt").exists() else ""
-        out.append({"slug": d.name, "dir": d, "meta": meta, "slides": slides, "caption": caption})
+        video = d / "video.mp4"
+        cover = d / "cover.jpg"
+        kind = "reel" if video.exists() else "carousel"
+        out.append({"slug": d.name, "dir": d, "meta": meta, "slides": slides, "caption": caption, "kind": kind,
+                    "video": video if video.exists() else None, "cover": cover if cover.exists() else None})
     return out
+
+
+def probe(video):
+    """Duration / codecs via ffprobe, if installed. Returns {} when unavailable."""
+    import shutil, subprocess
+    if not shutil.which("ffprobe"):
+        return {}
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name,width,height",
+                        "-of", "json", str(video)], capture_output=True, text=True)
+    try:
+        info = json.loads(r.stdout)
+    except ValueError:
+        return {"error": r.stderr.strip()[:200] or "unreadable video"}
+    out = {"duration": float(info.get("format", {}).get("duration", 0) or 0)}
+    for st in info.get("streams", []):
+        if st.get("codec_type") == "video":
+            out.update(vcodec=st.get("codec_name"), width=st.get("width"), height=st.get("height"))
+        elif st.get("codec_type") == "audio":
+            out["acodec"] = st.get("codec_name")
+    return out
+
+
+def validate_reel(p):
+    problems = []
+    mb = p["video"].stat().st_size / 1024 / 1024
+    if mb > VIDEO_MAX_MB:
+        problems.append(f"video.mp4 is {mb:.0f} MB (max {VIDEO_MAX_MB} MB) - re-run prepare-video")
+    info = probe(p["video"])
+    if "error" in info:
+        problems.append(f"video.mp4 can't be read: {info['error']}")
+    elif info:
+        if not REEL_MIN_S <= info["duration"] <= REEL_MAX_S:
+            problems.append(f"video is {info['duration']:.1f}s (Reels need {REEL_MIN_S}s-{REEL_MAX_S // 60} min)")
+        if info.get("vcodec") not in ("h264", "hevc"):
+            problems.append(f"video codec {info.get('vcodec')} (use H.264) - re-run prepare-video")
+        if info.get("acodec") not in (None, "aac"):
+            problems.append(f"audio codec {info.get('acodec')} (use AAC) - re-run prepare-video")
+    if p["slides"]:
+        problems.append("a Reel folder must not also contain slides (only video.mp4 + optional cover.jpg)")
+    return problems
 
 
 def validate(p):
     problems = []
-    if not 2 <= len(p["slides"]) <= MAX_SLIDES:
+    if p["kind"] == "reel":
+        problems += validate_reel(p)
+    elif not 2 <= len(p["slides"]) <= MAX_SLIDES:
         problems.append(f"needs 2-{MAX_SLIDES} JPEG slides, found {len(p['slides'])}")
     if not p["caption"]:
         problems.append("caption.txt is missing or empty")
@@ -154,13 +204,52 @@ def cmd_prepare(slides_dir, caption_file, publish_at, slug):
     return cmd_check()
 
 
+def cmd_prepare_video(video, caption_file, publish_at, slug, cover=None):
+    """Re-encode any video into Instagram's Reels spec and queue it."""
+    import shutil, subprocess
+    try:
+        parse_time(publish_at)
+    except ValueError as e:
+        die(str(e))
+    if not shutil.which("ffmpeg"):
+        die("ffmpeg is needed for prepare-video")
+    src = pathlib.Path(video)
+    if not src.exists():
+        die(f"{src} not found")
+    dest = QUEUE / slug
+    dest.mkdir(parents=True, exist_ok=True)
+    out = dest / "video.mp4"
+    vf = ("scale=1080:1920:force_original_aspect_ratio=decrease,"
+          "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x060a18,fps=30,format=yuv420p")
+    has_audio = probe(src).get("acodec") is not None if shutil.which("ffprobe") else True
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src)]
+    if not has_audio:   # Instagram is happier with an audio track; add silence
+        cmd += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-shortest"]
+    for crf in (21, 24, 27, 30):
+        subprocess.run(cmd + ["-vf", vf, "-c:v", "libx264", "-profile:v", "high", "-preset", "veryfast",
+                              "-crf", str(crf), "-maxrate", "8M", "-bufsize", "16M",
+                              "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-movflags", "+faststart",
+                              str(out)], check=True)
+        if out.stat().st_size / 1048576 <= VIDEO_MAX_MB:
+            break
+    if cover:
+        from PIL import Image
+        Image.open(cover).convert("RGB").save(dest / "cover.jpg", "JPEG", quality=92)
+    (dest / "caption.txt").write_text(pathlib.Path(caption_file).read_text().strip() + "\n")
+    (dest / "post.json").write_text(json.dumps({"publish_at": publish_at, "share_to_feed": True}, indent=2) + "\n")
+    print(f"queued Reel {slug}: {out.stat().st_size / 1048576:.1f} MB, publishes at {publish_at}")
+    return cmd_check()
+
+
 def cmd_check():
     log, bad = load_log(), 0
     for p in posts():
         state = "PUBLISHED" if p["slug"] in log else "queued"
         problems = validate(p)
         bad += bool(problems)
-        print(f"[{state}] {p['slug']}: {len(p['slides'])} slides, at {p['meta'].get('publish_at')}")
+        what = (f"Reel ({p['video'].stat().st_size / 1048576:.1f} MB{', cover' if p['cover'] else ''})"
+                if p["kind"] == "reel" else f"{len(p['slides'])} slides")
+        print(f"[{state}] {p['slug']}: {what}, at {p['meta'].get('publish_at')}")
         for msg in problems:
             print(f"    ! {msg}")
     if bad:
@@ -187,15 +276,16 @@ def ig_id():
     return call("GET", "me", fields="user_id")["user_id"]
 
 
-def wait_ready(container_id, label):
-    for _ in range(30):                       # up to ~5 minutes
-        st = call("GET", container_id, fields="status_code").get("status_code")
+def wait_ready(container_id, label, minutes=5):
+    for _ in range(minutes * 6):              # check every 10 s
+        info = call("GET", container_id, fields="status_code,status")
+        st = info.get("status_code")
         if st == "FINISHED":
             return
         if st in ("ERROR", "EXPIRED"):
-            die(f"{label} container {container_id} is {st}")
+            die(f"{label} container {container_id} is {st}: {info.get('status', '')}")
         time.sleep(10)
-    die(f"{label} container {container_id} not ready after 5 minutes")
+    die(f"{label} container {container_id} not ready after {minutes} minutes")
 
 
 def public_url(path):
@@ -210,7 +300,42 @@ def public_url(path):
     die("can't build public image URLs: set IMAGE_BASE_URL or run inside GitHub Actions")
 
 
+def upload_video(container, video):
+    """Resumable upload: send the file bytes straight to Meta (no public link needed)."""
+    uri = container.get("uri") or f"https://rupload.facebook.com/ig-api-upload/{VER}/{container['id']}"
+    size = video.stat().st_size
+    with open(video, "rb") as f:
+        r = requests.post(uri, data=f, timeout=900, headers={
+            "Authorization": f"OAuth {token()}", "offset": "0", "file_size": str(size)})
+    try:
+        body = r.json()
+    except ValueError:
+        body = {"raw": r.text[:300]}
+    if r.status_code >= 400 or not body.get("success", True) or "error" in body:
+        die(f"video upload failed ({r.status_code}): {json.dumps(body)[:500]}")
+    print(f"  uploaded {size / 1048576:.1f} MB")
+
+
+def publish_reel(p, user_id):
+    params = {"media_type": "REELS", "upload_type": "resumable", "caption": p["caption"],
+              "share_to_feed": "true" if p["meta"].get("share_to_feed", True) else "false"}
+    if p["cover"]:
+        params["cover_url"] = public_url(p["cover"])
+    elif "thumb_offset_ms" in p["meta"]:
+        params["thumb_offset"] = str(int(p["meta"]["thumb_offset_ms"]))
+    c = call("POST", f"{user_id}/media", **params)
+    print(f"  reel container {c['id']}")
+    upload_video(c, p["video"])
+    wait_ready(c["id"], "reel", minutes=15)   # Instagram transcodes the video first
+    res = call("POST", f"{user_id}/media_publish", creation_id=c["id"])
+    media_id = res["id"]
+    link = call("GET", media_id, fields="permalink").get("permalink", "")
+    return media_id, link
+
+
 def publish_one(p, user_id):
+    if p["kind"] == "reel":
+        return publish_reel(p, user_id)
     children = []
     for s in p["slides"]:
         c = call("POST", f"{user_id}/media", image_url=public_url(s), is_carousel_item="true")
@@ -241,6 +366,11 @@ def cmd_publish(dry_run=False):
         return
     if dry_run:
         for p in due:
+            if p["kind"] == "reel":
+                print(f"[dry-run] would publish Reel {p['slug']} ({p['video'].stat().st_size / 1048576:.1f} MB, direct upload)")
+                if p["cover"]:
+                    print("    cover:", public_url(p["cover"]))
+                continue
             print(f"[dry-run] would publish {p['slug']} ({len(p['slides'])} slides)")
             for s in p["slides"]:
                 print("   ", public_url(s))
@@ -288,6 +418,8 @@ if __name__ == "__main__":
     cmd = a[0]
     if cmd == "prepare" and len(a) == 5:
         cmd_prepare(*a[1:])
+    elif cmd == "prepare-video" and len(a) in (5, 6):
+        cmd_prepare_video(*a[1:])
     elif cmd == "check":
         cmd_check()
     elif cmd == "whoami":

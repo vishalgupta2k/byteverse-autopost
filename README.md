@@ -1,6 +1,6 @@
 # ByteVerse Daily — Instagram Autopost
 
-Publishes carousel posts to **@byteverse.daily** automatically at a chosen time,
+Publishes carousel posts **and Reels** to **@byteverse.daily** automatically at a chosen time,
 using the official **Instagram API with Instagram Login** (no Facebook Page needed)
 and free **GitHub Actions**.
 
@@ -9,6 +9,11 @@ queue/2026-11-17-nodejs/      <- one folder per post
   01.jpg … 10.jpg             <- slides (JPEG, 2–10 of them)
   caption.txt                 <- caption + max 5 hashtags
   post.json                   <- {"publish_at": "2026-11-17T19:30:00+05:30"}
+queue/2026-11-18-js-reel/     <- a Reel instead of slides
+  video.mp4                   <- 1080x1920 H.264/AAC, under 95 MB
+  cover.jpg                   <- optional thumbnail
+  caption.txt
+  post.json                   <- {"publish_at": "...", "share_to_feed": true}
 published.json                <- log of what went out (written by the bot)
 ```
 
@@ -40,6 +45,17 @@ python autopost.py prepare <slides_folder> <caption.txt> 2026-11-20T19:30:00+05:
 python autopost.py check
 git add queue && git commit -m "Queue SQL notes" && git push
 ```
+
+Adding a Reel (any video → converted to Instagram's spec automatically):
+
+```bash
+python autopost.py prepare-video my_video.mp4 caption.txt 2026-11-18T19:30:00+05:30 2026-11-18-js-reel cover.png
+```
+
+Reels are uploaded **directly to Meta** (resumable upload), so videos never need a public link.
+Instagram processes the video for a few minutes before it goes live.
+Not possible through the API: Instagram's music library / trending audio, stickers, polls.
+Optional in `post.json`: `"share_to_feed": false` (Reels tab only), `"thumb_offset_ms": 1500` (cover frame when no cover.jpg).
 
 To post something that is already due right away, push a commit whose message contains `[publish]`.
 To cancel a post, delete its folder before its time. To change the time, edit `post.json`.
