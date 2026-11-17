@@ -1,0 +1,26 @@
+REST API Design Notes — Backend Series Part 2 🌐⚙️
+
+Building or interviewing for backend roles? Save this — the API design questions that come up in almost every backend round.
+
+📌 Inside:
+1️⃣ What REST really means
+2️⃣ GET vs POST vs PUT vs PATCH vs DELETE
+3️⃣ Status codes you must know (401 vs 403!)
+4️⃣ Clean URL design: good vs bad
+5️⃣ Requests & consistent error responses
+6️⃣ Pagination: offset vs cursor
+7️⃣ Auth: API keys, sessions, JWT, OAuth
+8️⃣ Versioning & rate limiting
+9️⃣ Caching + REST vs GraphQL vs gRPC
+🔟 Rapid-fire interview Q&A
+
+💡 Could retrying a payment charge your user twice? Swipe to slide 2 👉
+
+💾 SAVE for your next interview
+📤 SHARE with a backend buddy
+💬 Comment "API" for Part 3
+
+Missed Part 1 (Node.js)? It's on my profile 👆
+Follow @byteverse.daily for daily coding & interview content 🚀
+
+#restapi #backenddeveloper #webdevelopment #softwareengineer #codinginterview

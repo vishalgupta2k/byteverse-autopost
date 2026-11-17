@@ -9,6 +9,7 @@ Commands
   check                                                    validate every queued post
   whoami                                                   show the account the token belongs to
   publish [--dry-run]                                      publish every post whose time has come
+  next-wait                                                seconds until the next post is due (-1 if none)
   refresh-token                                            print a refreshed long-lived token
 """
 import datetime as dt
@@ -387,6 +388,16 @@ def cmd_publish(dry_run=False):
         print(f"{len(due) - 1} more due post(s) will go out on the next runs")
 
 
+def cmd_next_wait():
+    """Print seconds until the earliest unpublished post is due (0 if due now, -1 if none)."""
+    log = load_log()
+    times = [parse_time(p["meta"]["publish_at"]) for p in posts() if p["slug"] not in log]
+    if not times:
+        print(-1); return
+    secs = (min(times) - dt.datetime.now(dt.timezone.utc)).total_seconds()
+    print(max(0, int(secs)))
+
+
 def cmd_refresh():
     if host() == "facebook":
         app_id, secret = os.environ.get("FB_APP_ID", ""), os.environ.get("FB_APP_SECRET", "")
@@ -426,6 +437,8 @@ if __name__ == "__main__":
         cmd_whoami()
     elif cmd == "publish":
         cmd_publish(dry_run="--dry-run" in a)
+    elif cmd == "next-wait":
+        cmd_next_wait()
     elif cmd == "refresh-token":
         cmd_refresh()
     else:

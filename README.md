@@ -64,5 +64,7 @@ To cancel a post, delete its folder before its time. To change the time, edit `p
 - The repo must be **public**: Instagram downloads the slides from their GitHub link.
 - Instagram's API accepts **JPEG only** — `prepare` converts PNGs automatically.
 - API carousels hold max **10** slides.
-- GitHub may run scheduled jobs a few minutes late; posts go out within ~30–45 min of the set time.
+- GitHub's 30-min timer can be **hours** late on quiet repos, so every push to `queue/` also starts
+  *Wait and publish on time*: it waits (in chained 5h50m steps, up to ~23 h) and publishes at the exact time.
+  Queue posts **less than ~23 h ahead** for guaranteed timing; the 30-min timer is the backup.
 - If anything fails, the run turns red and GitHub emails you. Nothing is marked published unless it really was.

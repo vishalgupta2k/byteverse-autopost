@@ -26,6 +26,10 @@ jobs:
     timeout-minutes: 40              # Reels can take ~15 min to process
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main                    # always the latest queue + publish log
+      - name: Image links point at this exact commit
+        run: echo "IMAGE_BASE_URL=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -59,5 +63,5 @@ jobs:
             git config user.email "actions@users.noreply.github.com"
             git add published.json
             git commit -m "Log published post"
-            git push
+            git pull --rebase origin main && git push
           fi
